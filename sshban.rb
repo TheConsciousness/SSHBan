@@ -3,11 +3,14 @@ require 'time'
 require 'optparse'
 require 'fileutils'
 
-$options = {:secsBetweenTries => 60, :banMinutes => 120}
+$options = {:secsBetweenTries => 60, :banMinutes => 120, :debug => false}
 OptionParser.new do |opts|
   opts.banner = "Usage: sshban.rb [options]"
   opts.on('-t', '--tries seconds', 'Amount of seconds between failed tries') do |secs|
     $options[:secsBetweenTries] = secs.to_i;
+  end
+  opts.on('-d', '--debug bool', 'Enable debug mode') do |bools|
+    $options[:debug] = bools;
   end
 
 end.parse!
