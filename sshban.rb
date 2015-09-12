@@ -1,4 +1,15 @@
 #!/usr/bin/ruby
+
+####################
+## Current to-do: 
+## Need 3 total files
+## SSHBAN.rb, BANFILE.dat, PREVIOUSBANS.dat
+## Banfile = current, outstanding bans
+## PreviousBans = all previous bans
+## PrevBnas file will be used to make sure next ban isn't the same as last ban (for main)
+## Unban method will only deal with the unbanning and deletion of bans in BANFILE
+## Don't get these two methods and files mixed up, they remain separate with two roles
+
 require 'time'
 require 'optparse'
 require 'fileutils'
@@ -17,8 +28,6 @@ OptionParser.new do |opts|
   end
 
 end.parse!
-
-#secsBetweenTries = 60
 
 def buildFails(amountLinesToRead)
   # Check auth.log for the latest authentication failures
@@ -48,6 +57,7 @@ def buildFails(amountLinesToRead)
 end
 
 def evalBanFile()
+  # Make sure the ban file exists
   unless (File.exist?"banfile.dat")
     FileUtils.touch("banfile.dat")
   end
@@ -65,13 +75,30 @@ def evalBanFile()
 end
 
 def appendBanFile(line)
+  # Make sure the ban file exists
   unless (File.exist?"banfile.dat")
     FileUtils.touch("banfile.dat")
-  end 
+  end
 
+  # Append the packaged ban string to the file
   banFile = File.open("banfile.dat", "a")
   banFile.write(line.to_s + "\n")
   banFile.close()
+end
+
+def rewriteBanFile(list)
+  banFile = File.open("banfile.dat", "w")
+  
+  # Instead of writing full list, write each line by line
+  unless (list.nil?)
+    for ban in list
+      banFile.write(ban.to_s)
+    end
+  else File.truncate("banfile.dat", 0)
+  end
+  banFile.close()
+  puts("Rewrite finished")
+
 end
 
 # Get our failed attempts from auth.log and get previous ban list from file
@@ -119,10 +146,12 @@ def main()
               
               # Check the banfile to see if the IP already exists
               stopBan = false
-              for bans in $banList
-                if (bans.include? thisIP)
-                  stopBan = true
-                  break
+              unless ($banList.nil?)
+                for bans in $banList
+                  if (bans.include? thisIP)
+                    stopBan = true
+                    break
+                  end
                 end
               end
 
@@ -161,7 +190,9 @@ end
 
 def unbanCheck()
   for bans in $banList
-
+    puts("ban inspect")
+    puts(bans.inspect)
+    
     # Define for clarity
     banStart = bans[0]
     banIP = bans[1]
@@ -181,12 +212,17 @@ def unbanCheck()
       rescue
         puts("UFW unban command failed")
       end
+
+      puts("Deleting ban from ban file")
+      $banList = $banList.delete($banList.index(bans))
+      rewriteBanFile($banList)
     else 
       puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
     end
-
+  puts("banlist inspect")
+  puts($banList.inspect)
   end
 end
 
-#main()
 unbanCheck()
+main()
