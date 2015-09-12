@@ -6,11 +6,14 @@ require 'fileutils'
 $options = {:secsBetweenTries => 60, :banMinutes => 120, :debug => false}
 OptionParser.new do |opts|
   opts.banner = "Usage: sshban.rb [options]"
-  opts.on('-t', '--tries seconds', 'Amount of seconds between failed tries') do |secs|
+  opts.on('-b', '--between seconds', 'Amount of seconds between failed tries') do |secs|
     $options[:secsBetweenTries] = secs.to_i;
   end
   opts.on('-d', '--debug bool', 'Enable debug mode') do |bools|
     $options[:debug] = bools;
+  end
+  opts.on('-t', '--time minutes', 'Amount of minutes to ban IP') do |mins|
+    $options[:banMinutes] = mins.to_i;
   end
 
 end.parse!
@@ -44,13 +47,22 @@ def buildFails(amountLinesToRead)
   return failHash
 end
 
-#def evalBanFile()
-#  banFile = File.open("banfile.dat", "r")
-#  banList = eval(banFile.gets)
-#  banFile.close()
-#
-#  puts(banList)
-#end
+def evalBanFile()
+  unless (File.exist?"banfile.dat")
+    FileUtils.touch("banfile.dat")
+  end
+
+  banFile = File.open("banfile.dat", "r")
+  banList = []
+  
+  # For every ban line in file, evaluate it and put it into larger list
+  for bans in banFile.readlines.each
+    banList.push(eval(bans))
+  end
+
+  banFile.close()
+  return banList
+end
 
 def appendBanFile(line)
   unless (File.exist?"banfile.dat")
@@ -62,9 +74,9 @@ def appendBanFile(line)
   banFile.close()
 end
 
-
+# Get our failed attempts from auth.log and get previous ban list from file
 $failList = buildFails(1000)
-#evalBanFile()
+$banList = evalBanFile()
 
 def main()
   # For every IP address in ["0.0.0.0"=>[0/0/0000 0:0:0, 0/0/0000 0:0:0]]
@@ -104,26 +116,39 @@ def main()
             # If the time between the second and third failures are less than set in arguments
             if (Time.parse(nextTime) - Time.parse(nextTwoTimes) <= $options[:secsBetweenTries])
               #puts(b.to_s + " " + nextTwoTimes.to_s + " = " + (Time.parse(b) - Time.parse(nextTwoTimes)).to_s)
-
-              # Create a package like this: [Current time, IP Address, Last failure attempt time]
-              currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
-              theBan = [currentTime, thisIP, Time.parse(b).to_s]
               
-              # ...and write the package to the file
-              appendBanFile(theBan)
-
-              # Raise the banhammer
-              begin
-                system('ufw insert 1 deny from ' + thisIP.to_s + ' to any port 22')
-              rescue
-                puts("UFW ban command failed.")
+              # Check the banfile to see if the IP already exists
+              stopBan = false
+              for bans in $banList
+                if (bans.include? thisIP)
+                  stopBan = true
+                  break
+                end
               end
 
-              #ufw insert 1 deny from <ip> to any port 22
-              #ufw delete deny from <ip> to any port 22
+              # Unless the IP wasn't already banned, ban it
+              unless (stopBan)
+                # Create a package like this: [Current time, IP Address, Last failure attempt time]
+                currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
+                theBan = [currentTime, thisIP, b]
+              
+                # ...and write the package to the file
+                appendBanFile(theBan)
+           
+                # Raise the banhammer
+                begin
+                  system('ufw insert 1 deny from ' + thisIP.to_s + ' to any port 22')
+                rescue
+                  puts("UFW ban command failed.")
+                end
 
-              # Prevent duplicate IPs being logged
-              break
+                #ufw insert 1 deny from <ip> to any port 22
+                #ufw delete deny from <ip> to any port 22
+
+                # Prevent duplicate IPs being logged
+                break
+              else puts("IP already banned")
+              end
 
             end
           end
@@ -134,4 +159,34 @@ def main()
   end
 end
 
-main()
+def unbanCheck()
+  for bans in $banList
+
+    # Define for clarity
+    banStart = bans[0]
+    banIP = bans[1]
+    banLastAttempt = bans[2]
+    currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
+
+    # Time (minutes) between now and start of ban
+    timeBetween = (Time.parse(currentTime) - Time.parse(banStart)) / 60.0
+    
+    # Debug
+    puts(banIP) if $options[:debug]
+    
+    # If the time between now and ban start >= ban period, unban IP and delete from file
+    if (timeBetween >= $options[:banMinutes])
+      begin
+        system('ufw delete deny from ' + banIP.to_s + ' to any port 22')
+      rescue
+        puts("UFW unban command failed")
+      end
+    else 
+      puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
+    end
+
+  end
+end
+
+#main()
+unbanCheck()
