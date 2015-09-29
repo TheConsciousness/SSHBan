@@ -11,6 +11,7 @@
 ## Don't get these two methods and files mixed up, they remain separate with two roles
 
 require 'time'
+require 'date'
 require 'optparse'
 require 'fileutils'
 
@@ -38,7 +39,7 @@ def buildFails(amountLinesToRead)
       # Index based on server name, get time of failure
       hostLocation = a.index(" vps ")
       dateTime = a[0..hostLocation]
-      failTime = Time.parse(dateTime).strftime("%m/%d/%y %H:%M:%S")
+      failTime = DateTime.parse(dateTime).strftime("%m/%d/%y %H:%M:%S")
       
       # Index based on keywords, get IP Address
       fromLocation = a.index(" from ")
@@ -74,27 +75,45 @@ def evalBanFile()
   return banList
 end
 
-def appendBanFile(line)
+def evalPreviousBanFile()
   # Make sure the ban file exists
-  unless (File.exist?"banfile.dat")
-    FileUtils.touch("banfile.dat")
+  unless (File.exist?"previousbans.dat")
+    FileUtils.touch("previousbans.dat")
+  end
+
+  banFile = File.open("previousbans.dat", "r")
+  banList = []
+
+  # For every ban line in file, evaluate it and put it into larger list
+  for bans in banFile.readlines.each
+    banList.push(eval(bans))
+  end
+
+  banFile.close()
+  return banList
+end
+
+def appendBanFile(file, line)
+  # Make sure the ban file exists
+  unless (File.exist?file)
+    FileUtils.touch(file)
   end
 
   # Append the packaged ban string to the file
-  banFile = File.open("banfile.dat", "a")
+  banFile = File.open(file, "a")
   banFile.write(line.to_s + "\n")
   banFile.close()
 end
 
-def rewriteBanFile(list)
-  banFile = File.open("banfile.dat", "w")
+def rewriteBanFile(file, list)
+  banFile = File.open(file, "w")
   
   # Instead of writing full list, write each line by line
   unless (list.nil?)
     for ban in list
       banFile.write(ban.to_s)
     end
-  else File.truncate("banfile.dat", 0)
+  else File.truncate(file, 0)
   end
   banFile.close()
   puts("Rewrite finished")
@@ -104,6 +123,7 @@ end
 # Get our failed attempts from auth.log and get previous ban list from file
 $failList = buildFails(1000)
 $banList = evalBanFile()
+$previousBanList = evalPreviousBanFile()
 
 def main()
   # For every IP address in ["0.0.0.0"=>[0/0/0000 0:0:0, 0/0/0000 0:0:0]]
@@ -135,16 +155,16 @@ def main()
        # puts(b.to_s + " minus " + nextTime.to_s)
         
         # If the time between the first two failures are less than set in arguments
-        if (Time.parse(b) - Time.parse(nextTime) <= $options[:secsBetweenTries])
+        if (DateTime.strptime(b, "%m/%d/%y %H:%M:%S") - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S") <= $options[:secsBetweenTries])
 
           # Unless there is no third failure
           unless (nextTwoTimes.nil?)
 
             # If the time between the second and third failures are less than set in arguments
-            if (Time.parse(nextTime) - Time.parse(nextTwoTimes) <= $options[:secsBetweenTries])
+            if (DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S") - DateTime.strptime(nextTwoTimes, "%m/%d/%y %H:%M:%S") <= $options[:secsBetweenTries])
               #puts(b.to_s + " " + nextTwoTimes.to_s + " = " + (Time.parse(b) - Time.parse(nextTwoTimes)).to_s)
               
-              # Check the banfile to see if the IP already exists
+              # Check the ban files to see if the records already exists
               stopBan = false
               unless ($banList.nil?)
                 for bans in $banList
@@ -155,14 +175,26 @@ def main()
                 end
               end
 
+              unless ($previousBanList.nil?)
+                for preBans in $previousBanList
+                  if (preBans.include? b)
+                    # If preBans include (b = last failure attempt)
+                    stopBan = true
+                    break
+                  end
+                end
+              end
+
               # Unless the IP wasn't already banned, ban it
               unless (stopBan)
+
                 # Create a package like this: [Current time, IP Address, Last failure attempt time]
                 currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
                 theBan = [currentTime, thisIP, b]
               
                 # ...and write the package to the file
-                appendBanFile(theBan)
+                appendBanFile("banfile.dat", theBan)
+                appendBanFile("previousbans.dat", theBan)
            
                 # Raise the banhammer
                 begin
@@ -200,7 +232,7 @@ def unbanCheck()
     currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
 
     # Time (minutes) between now and start of ban
-    timeBetween = (Time.parse(currentTime) - Time.parse(banStart)) / 60.0
+    timeBetween = (DateTime.strptime(currentTime, "%m/%d/%y %H:%M:%S") - DateTime.strptime(banStart, "%m/%d/%y %H:%M:%S")) / 60.0
     
     # Debug
     puts(banIP) if $options[:debug]
@@ -215,7 +247,7 @@ def unbanCheck()
 
       puts("Deleting ban from ban file")
       $banList = $banList.delete($banList.index(bans))
-      rewriteBanFile($banList)
+      rewriteBanFile("banfile.dat", $banList)
     else 
       puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
     end
@@ -224,5 +256,12 @@ def unbanCheck()
   end
 end
 
-unbanCheck()
-main()
+def repeat()
+  while true
+    unbanCheck()
+    main()
+    sleep(30)
+  end
+end
+
+repeat()
