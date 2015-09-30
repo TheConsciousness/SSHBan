@@ -6,7 +6,7 @@
 ## SSHBAN.rb, BANFILE.dat, PREVIOUSBANS.dat
 ## Banfile = current, outstanding bans
 ## PreviousBans = all previous bans
-## PrevBnas file will be used to make sure next ban isn't the same as last ban (for main)
+## PrevBans file will be used to make sure next ban isn't the same as last ban (for main)
 ## Unban method will only deal with the unbanning and deletion of bans in BANFILE
 ## Don't get these two methods and files mixed up, they remain separate with two roles
 
@@ -121,7 +121,7 @@ def rewriteBanFile(file, list)
 end
 
 # Get our failed attempts from auth.log and get previous ban list from file
-$failList = buildFails(1000)
+$failList = buildFails(2000)
 $banList = evalBanFile()
 $previousBanList = evalPreviousBanFile()
 
@@ -169,6 +169,7 @@ def main()
               unless ($banList.nil?)
                 for bans in $banList
                   if (bans.include? thisIP)
+                    puts("Ban currently in place, skipping.")
                     stopBan = true
                     break
                   end
@@ -179,6 +180,7 @@ def main()
                 for preBans in $previousBanList
                   if (preBans.include? b)
                     # If preBans include (b = last failure attempt)
+                    puts("Previous ban found, skipping.")
                     stopBan = true
                     break
                   end
@@ -222,8 +224,8 @@ end
 
 def unbanCheck()
   for bans in $banList
-    puts("ban inspect")
-    puts(bans.inspect)
+    puts("----- Current Bans -----") if $options[:debug]
+    puts(bans.inspect) if $options[:debug]
     
     # Define for clarity
     banStart = bans[0]
@@ -232,7 +234,7 @@ def unbanCheck()
     currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
 
     # Time (minutes) between now and start of ban
-    timeBetween = (DateTime.strptime(currentTime, "%m/%d/%y %H:%M:%S") - DateTime.strptime(banStart, "%m/%d/%y %H:%M:%S")) / 60.0
+    timeBetween = (DateTime.strptime(currentTime, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(banStart, "%m/%d/%y %H:%M:%S").to_time) / 60.0
     
     # Debug
     puts(banIP) if $options[:debug]
@@ -251,8 +253,9 @@ def unbanCheck()
     else 
       puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
     end
-  puts("banlist inspect")
-  puts($banList.inspect)
+
+  #puts("banlist inspect")
+  #puts($banList.inspect)
   end
 end
 
@@ -260,6 +263,7 @@ def repeat()
   while true
     unbanCheck()
     main()
+    puts("Sleeping") if $options[:debug]    
     sleep(30)
   end
 end
