@@ -1,14 +1,9 @@
 #!/usr/bin/ruby
 
 ####################
-## Current to-do: 
-## Need 3 total files
-## SSHBAN.rb, BANFILE.dat, PREVIOUSBANS.dat
-## Banfile = current, outstanding bans
-## PreviousBans = all previous bans
-## PrevBans file will be used to make sure next ban isn't the same as last ban (for main)
-## Unban method will only deal with the unbanning and deletion of bans in BANFILE
-## Don't get these two methods and files mixed up, they remain separate with two roles
+## Troubleshooting:
+## When auth.log resets, you will get a nil error
+## Because there aren't enough lines to read
 
 require 'time'
 require 'date'
@@ -121,11 +116,16 @@ def rewriteBanFile(file, list)
 end
 
 # Get our failed attempts from auth.log and get previous ban list from file
-$failList = buildFails(2000)
-$banList = evalBanFile()
-$previousBanList = evalPreviousBanFile()
+#$failList = buildFails(2000)
+#$banList = evalBanFile()
+#$previousBanList = evalPreviousBanFile()
 
 def main()
+  # Define our files
+  $failList = buildFails(800)
+  $banList = evalBanFile()
+  $previousBanList = evalPreviousBanFile()
+
   # For every IP address in ["0.0.0.0"=>[0/0/0000 0:0:0, 0/0/0000 0:0:0]]
   for a in $failList.keys
     # Current IP address
@@ -223,8 +223,17 @@ def main()
 end
 
 def unbanCheck()
-  for bans in $banList
-    puts("----- Current Bans -----") if $options[:debug]
+  puts("----- Running UnbanCheck -----") if $options[:debug]
+  puts("----- BANLIST (currently banned)----") if $options[:debug]
+  puts($banList.inspect) if $options[:debug]
+
+  #for bans in $banList
+  $banList.delete_if do |bans|
+
+    # Because of the delete_if method, rewrites must occur first
+    rewriteBanFile("banfile.dat", $banList)
+
+    puts("----- BANLIST loop, single ban: -----") if $options[:debug]
     puts(bans.inspect) if $options[:debug]
     
     # Define for clarity
@@ -236,9 +245,6 @@ def unbanCheck()
     # Time (minutes) between now and start of ban
     timeBetween = (DateTime.strptime(currentTime, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(banStart, "%m/%d/%y %H:%M:%S").to_time) / 60.0
     
-    # Debug
-    puts(banIP) if $options[:debug]
-    
     # If the time between now and ban start >= ban period, unban IP and delete from file
     if (timeBetween >= $options[:banMinutes])
       begin
@@ -248,10 +254,12 @@ def unbanCheck()
       end
 
       puts("Deleting ban from ban file")
-      $banList = $banList.delete($banList.index(bans))
-      rewriteBanFile("banfile.dat", $banList)
+      #$banList = $banList.delete($banList.index(bans))
+      #rewriteBanFile("banfile.dat", $banList)
+      true
     else 
       puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
+      false
     end
 
   #puts("banlist inspect")
@@ -261,8 +269,9 @@ end
 
 def repeat()
   while true
-    unbanCheck()
     main()
+    unbanCheck()
+    #main()
     puts("Sleeping") if $options[:debug]    
     sleep(30)
   end
