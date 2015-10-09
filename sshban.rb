@@ -5,6 +5,11 @@
 ## When auth.log resets, you will get a nil error
 ## Because there aren't enough lines to read
 
+## TODO:
+## Instead of looping over current bans and deleting the ones
+## that have expired (doesnt work), make a new array and add the 
+## ones that aren't expired to it, then set banList = newBanList
+
 require 'time'
 require 'date'
 require 'optparse'
@@ -227,12 +232,11 @@ def unbanCheck()
   puts("----- BANLIST (currently banned)----") if $options[:debug]
   puts($banList.inspect) if $options[:debug]
 
-  #for bans in $banList
-  $banList.delete_if do |bans|
-
-    # Because of the delete_if method, rewrites must occur first
-    rewriteBanFile("banfile.dat", $banList)
-
+  # Placeholder banlist for unexpired bans
+  placeholder = []
+  
+  for bans in $banList
+    
     puts("----- BANLIST loop, single ban: -----") if $options[:debug]
     puts(bans.inspect) if $options[:debug]
     
@@ -247,24 +251,21 @@ def unbanCheck()
     
     # If the time between now and ban start >= ban period, unban IP and delete from file
     if (timeBetween >= $options[:banMinutes])
-      begin
-        system('ufw delete deny from ' + banIP.to_s + ' to any port 22')
-      rescue
-        puts("UFW unban command failed")
-      end
+      # This method only returns true, no try/catch works
+      system('ufw delete deny from ' + banIP.to_s + ' to any port 22')  
 
-      puts("Deleting ban from ban file")
       #$banList = $banList.delete($banList.index(bans))
       #rewriteBanFile("banfile.dat", $banList)
-      true
     else 
       puts("stays banned for: " + ($options[:banMinutes] - timeBetween).to_s + " mins") if $options[:debug]
-      false
+      placeholder.push(bans)
     end
 
-  #puts("banlist inspect")
-  #puts($banList.inspect)
   end
+
+  rewriteBanFile("banfile.dat", placeholder)
+  $banList = placeholder
+  puts($banList.inspect)
 end
 
 def repeat()
