@@ -140,8 +140,8 @@ def main()
     
     # Debug outputs
     if $options[:debug]
-      puts(a) 
-      puts("-------") 
+      puts("\nIP: " + a.to_s) 
+      puts("--") 
     end  
 
     # For every failure time for this IP address 'a' 
@@ -228,6 +228,8 @@ def main()
 end
 
 def unbanCheck()
+  $banList = evalBanFile()
+  
   puts("----- Running UnbanCheck -----") if $options[:debug]
   puts("----- BANLIST (currently banned)----") if $options[:debug]
   puts($banList.inspect) if $options[:debug]
