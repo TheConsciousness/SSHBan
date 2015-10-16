@@ -160,13 +160,13 @@ def main()
        # puts(b.to_s + " minus " + nextTime.to_s)
         
         # If the time between the first two failures are less than set in arguments
-        if (DateTime.strptime(b, "%m/%d/%y %H:%M:%S") - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S") <= $options[:secsBetweenTries])
-
+        if (DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time <= $options[:secsBetweenTries])
+           
           # Unless there is no third failure
           unless (nextTwoTimes.nil?)
 
             # If the time between the second and third failures are less than set in arguments
-            if (DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S") - DateTime.strptime(nextTwoTimes, "%m/%d/%y %H:%M:%S") <= $options[:secsBetweenTries])
+            if (DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTwoTimes, "%m/%d/%y %H:%M:%S").to_time <= $options[:secsBetweenTries])
               #puts(b.to_s + " " + nextTwoTimes.to_s + " = " + (Time.parse(b) - Time.parse(nextTwoTimes)).to_s)
               
               # Check the ban files to see if the records already exists
