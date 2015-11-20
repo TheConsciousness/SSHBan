@@ -6,9 +6,7 @@
 ## Because there aren't enough lines to read
 
 ## TODO:
-## Instead of looping over current bans and deleting the ones
-## that have expired (doesnt work), make a new array and add the 
-## ones that aren't expired to it, then set banList = newBanList
+## Get lines in auth.log and then set buildFails(#lines)
 
 require 'time'
 require 'date'
@@ -126,8 +124,12 @@ end
 #$previousBanList = evalPreviousBanFile()
 
 def main()
+
+  # Get the amount of lines in /var/log/auth.log
+  numLines = %x[wc -l /var/log/auth.log].split(' ')
+
   # Define our files
-  $failList = buildFails(800)
+  $failList = buildFails(numLines[0].to_i - 1)
   $banList = evalBanFile()
   $previousBanList = evalPreviousBanFile()
 
@@ -157,18 +159,20 @@ def main()
       # ...unless it next failure time doesn't exist
       unless (nextTime.nil?)
 
-       # puts(b.to_s + " minus " + nextTime.to_s)
+        # Show seconds between output times
+        puts(DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time) if $options[:debug]
         
         # If the time between the first two failures are less than set in arguments
         if (DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time <= $options[:secsBetweenTries])
-           
+          
           # Unless there is no third failure
           unless (nextTwoTimes.nil?)
 
             # If the time between the second and third failures are less than set in arguments
             if (DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTwoTimes, "%m/%d/%y %H:%M:%S").to_time <= $options[:secsBetweenTries])
+
               #puts(b.to_s + " " + nextTwoTimes.to_s + " = " + (Time.parse(b) - Time.parse(nextTwoTimes)).to_s)
-              
+
               # Check the ban files to see if the records already exists
               stopBan = false
               unless ($banList.nil?)
