@@ -12,8 +12,9 @@ require 'time'
 require 'date'
 require 'optparse'
 require 'fileutils'
+require 'json'
 
-$options = {:secsBetweenTries => 60, :banMinutes => 120, :debug => false}
+$options = {:secsBetweenTries => 60, :banMinutes => 120, :debug => false, :refSeconds => 10}
 OptionParser.new do |opts|
   opts.banner = "Usage: sshban.rb [options]"
   opts.on('-b', '--between seconds', 'Amount of seconds between failed tries') do |secs|
@@ -24,6 +25,9 @@ OptionParser.new do |opts|
   end
   opts.on('-t', '--time minutes', 'Amount of minutes to ban IP') do |mins|
     $options[:banMinutes] = mins.to_i;
+  end
+  opts.on('-r', '--refresh seconds', 'Amount of seconds to check for new attempts') do |rsecs|
+    $options[:refSeconds] = rsecs.to_i;
   end
 
 end.parse!
@@ -66,7 +70,14 @@ def evalBanFile()
   
   # For every ban line in file, evaluate it and put it into larger list
   for bans in banFile.readlines.each
-    banList.push(eval(bans))
+    #puts(bans.split(",").inspect)
+    #puts((JSON.parse bans).inspect)
+    #puts("~~~~~~~~")
+    #banList.push(eval(bans))
+
+    # Eval is not safe, use JSON.parse to convert string to array
+    # http://stackoverflow.com/questions/4477127/ruby-parsing-a-string-representation-of-nested-arrays-into-an-array
+    banList.push(JSON.parse bans)
   end
 
   banFile.close()
@@ -127,11 +138,14 @@ def main()
 
   # Get the amount of lines in /var/log/auth.log
   numLines = %x[wc -l /var/log/auth.log].split(' ')
+  puts("Number of auth.log lines: " + numLines[0].to_s) if $options[:debug]
 
   # Define our files
   $failList = buildFails(numLines[0].to_i - 1)
   $banList = evalBanFile()
   $previousBanList = evalPreviousBanFile()
+
+  puts("Looping through auth.log failed attempts")
 
   # For every IP address in ["0.0.0.0"=>[0/0/0000 0:0:0, 0/0/0000 0:0:0]]
   for a in $failList.keys
@@ -142,13 +156,14 @@ def main()
     
     # Debug outputs
     if $options[:debug]
-      puts("\nIP: " + a.to_s) 
+      puts("\nIP: " + a.to_s + " Time: " + $failList[a].to_s) 
       puts("--") 
     end  
 
     # For every failure time for this IP address 'a' 
     for b in thisList
-      # Debug output
+
+      # Show time of failure
       puts(b) if $options[:debug]
 
       # Get the index number of the first failure time, and the next 2
@@ -159,9 +174,12 @@ def main()
       # ...unless it next failure time doesn't exist
       unless (nextTime.nil?)
 
+        timeBetween = (DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time)
+
         # Show seconds between output times
-        puts(DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time) if $options[:debug]
-        
+        #puts(DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time, "secs ^ between V") if $options[:debug]
+        puts(timeBetween.to_s + " secs between ^v") if $options[:debug]        
+
         # If the time between the first two failures are less than set in arguments
         if (DateTime.strptime(b, "%m/%d/%y %H:%M:%S").to_time - DateTime.strptime(nextTime, "%m/%d/%y %H:%M:%S").to_time <= $options[:secsBetweenTries])
           
@@ -178,7 +196,8 @@ def main()
               unless ($banList.nil?)
                 for bans in $banList
                   if (bans.include? thisIP)
-                    puts("Ban currently in place, skipping.")
+		    currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
+                    puts(currentTime + ": Ban currently in place, skipping.")
                     stopBan = true
                     break
                   end
@@ -189,7 +208,8 @@ def main()
                 for preBans in $previousBanList
                   if (preBans.include? b)
                     # If preBans include (b = last failure attempt)
-                    puts("Previous ban found, skipping.")
+		    currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S")
+                    puts(currentTime + ": Previous ban found, skipping.")
                     stopBan = true
                     break
                   end
@@ -219,7 +239,9 @@ def main()
 
                 # Prevent duplicate IPs being logged
                 break
-              else puts("IP already banned")
+              else
+		currentTime = Time.now.strftime("%m/%d/%y %H:%M:%S") 
+		puts(currentTime + ": IP already banned")
               end
 
             end
@@ -280,8 +302,12 @@ def repeat()
     unbanCheck()
     #main()
     puts("Sleeping") if $options[:debug]    
-    sleep(30)
+    sleep($options[:refSeconds])
   end
 end
 
 repeat()
+
+# Error Warning
+`mail -s "SSHBan" 7656020229@txt.att.net<<EOM
+The process has failed.`
