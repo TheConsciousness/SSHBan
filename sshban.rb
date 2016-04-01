@@ -110,7 +110,7 @@ def appendBanFile(file, line)
 
   # Append the packaged ban string to the file
   banFile = File.open(file, "a")
-  banFile.write(line.to_s + "\n")
+  banFile.puts(line.to_s)
   banFile.close()
 end
 
@@ -120,7 +120,7 @@ def rewriteBanFile(file, list)
   # Instead of writing full list, write each line by line
   unless (list.nil?)
     for ban in list
-      banFile.write(ban.to_s)
+      banFile.puts(ban.to_s)
     end
   else File.truncate(file, 0)
   end
@@ -306,8 +306,16 @@ def repeat()
   end
 end
 
-repeat()
+begin
+  repeat()
+rescue Exception => e
+  `mail -s "SSHBan" 7656020229@txt.att.net<<EOM
+The process has failed.`
+  raise e
+end
+
+
 
 # Error Warning
-`mail -s "SSHBan" 7656020229@txt.att.net<<EOM
-The process has failed.`
+#`mail -s "SSHBan" 7656020229@txt.att.net<<EOM
+#The process has failed.`
